@@ -1,0 +1,128 @@
+services:
+  airflow-init:
+    build: .
+    image: apache/airflow:2.6.1-python3.9
+    user: "0:0"
+    environment:
+      - AIRFLOW_HOME=/opt/airflow
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__CORE__FERNET_KEY=PAqBeGJLJTYFzVkOGHWIYXdLO7XdXz5yTdxAGJe9ezM=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - MLFLOW_TRACKING_URI=file:/opt/mlruns
+      - MLFLOW_REGISTRY_URI=file:/opt/airflow/mlruns
+    volumes:
+      - airflow_data:/opt/airflow
+      - ./dags:/opt/airflow/dags
+      - ./utils:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+      - ./datamart:/opt/airflow/datamart
+      - ./model_bank:/opt/airflow/model_bank
+      - ./monitoring:/opt/airflow/monitoring
+      - mlruns:/opt/mlruns
+    
+    entrypoint: |
+      /bin/bash -lc '
+        set -euo pipefail
+        chown -R 50000:0 /opt/airflow
+        chmod -R g+w /opt/airflow
+        # ensure mlruns exists and is writable by airflow
+        mkdir -p /opt/mlruns
+        chown -R 50000:0 /opt/mlruns
+        chmod -R g+w /opt/mlruns
+        # use gosu to switch to airflow client
+        gosu airflow bash -lc "airflow version"
+        gosu airflow bash -lc "airflow db init"
+        gosu airflow bash -lc "airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com" || true
+        ls -l /opt/airflow/airflow.db
+        '
+
+  airflow-webserver:
+    image: apache/airflow:2.6.1-python3.9
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    user: "${AIRFLOW_UID:-50000}:0"
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__CORE__FERNET_KEY=PAqBeGJLJTYFzVkOGHWIYXdLO7XdXz5yTdxAGJe9ezM=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - MLFLOW_TRACKING_URI=file:/opt/mlruns
+      - MLFLOW_REGISTRY_URI=file:/opt/airflow/mlruns
+    volumes:
+      - airflow_data:/opt/airflow
+      - ./dags:/opt/airflow/dags
+      - ./utils:/opt/airflow/scripts
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+      - ./datamart:/opt/airflow/datamart
+      - ./model_bank:/opt/airflow/model_bank
+      - ./monitoring:/opt/airflow/monitoring
+      - mlruns:/opt/mlruns 
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.6.1-python3.9
+    # This is the corrected block
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__CORE__FERNET_KEY=PAqBeGJLJTYFzVkOGHWIYXdLO7XdXz5yTdxAGJe9ezM=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - MLFLOW_TRACKING_URI=file:/opt/mlruns
+      - MLFLOW_REGISTRY_URI=file:/opt/airflow/mlruns
+    volumes:
+      - airflow_data:/opt/airflow
+      - ./dags:/opt/airflow/dags
+      - ./utils:/opt/airflow/scripts
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+      - ./data:/opt/airflow/data
+      - ./datamart:/opt/airflow/datamart
+      - ./model_bank:/opt/airflow/model_bank
+      - ./monitoring:/opt/airflow/monitoring
+      - mlruns:/opt/mlruns  
+    command: scheduler
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command: ['--config.file=/etc/prometheus/prometheus.yml', '--storage.tsdb.retention.time=365d', '--storage.tsdb.path=/prometheus']
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - pushgateway
+
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    command: ["--persistence.file=/data/metrics", "--persistence.interval=5m"]
+    volumes:
+      - pushgateway_data:/data 
+    ports:
+      - "9091:9091"
+  grafana:
+    image: grafana/grafana:11.3.0
+    volumes:
+      - ./grafana_data:/var/lib/grafana   
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+
+      
+volumes:
+  airflow_data:
+  mlruns:
+  prometheus_data:
+  pushgateway_data:
+  grafana_data:
+

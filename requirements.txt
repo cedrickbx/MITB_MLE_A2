@@ -1,0 +1,12 @@
+numpy
+pandas >= 2.0.0
+matplotlib
+seaborn
+scipy
+scikit-learn
+pydantic>=1.10,<2
+pyspark
+tqdm
+xgboost
+mlflow
+prometheus-client
