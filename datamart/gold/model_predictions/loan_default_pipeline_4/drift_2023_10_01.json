@@ -1,0 +1,1 @@
+{"snapshot_date": "2023-10-01", "model_id": "loan_default_pipeline_4", "psi_score": 0.011668332212930073, "csi_max": 0.042455650078549616, "psi_breach": false, "csi_breach": false, "psi_threshold": 0.25, "csi_threshold": 0.25}
